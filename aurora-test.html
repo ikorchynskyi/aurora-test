@@ -1,24 +1,24 @@
 <!--
    aurora-test.html
-   
+
    Copyright 2015 Igor <ikorchynskyi@gmail.com>
-   
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA.
-   
-   
+
+
 -->
 
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
@@ -31,27 +31,78 @@
 	<meta name="generator" content="Geany 1.23.1" />
     <script src="lib/aurora.js"></script>
     <script src="lib/mp3.js"></script>
+    <script src="XAudioJS/resampler.js"></script>
+    <script src="XAudioJS/swfobject.js"></script>
+    <script src="XAudioJS/XAudioServer.js"></script>
     <script>
-        function startPlay() {
-            var file = document.getElementById('myFile').files[0];
-            if (file) {
-                var asset = AV.Asset.fromFile(file);
-                var player = new AV.Player(asset);
-                player.asset.on('decodeStart', function() {
-                    this.decoder.once('end', function() {
-                        player.startPlaying();
-                        player.play();
-                    });
-                })
-                player.asset.start();
+        function getFile() {
+            return document.getElementById('myFile').files[0];
+        }
+
+        function startAuroraJSPlay() {
+            var file = getFile();
+            if (!file) {
+                return;
             }
+            var asset = AV.Asset.fromFile(file);
+            var player = new AV.Player(asset);
+            player.asset.on('decodeStart', function() {
+                this.decoder.once('end', function() {
+                    player.startPlaying();
+                    player.play();
+                });
+            })
+            player.asset.start();
             window.player = player;
         }
+
+        function startXAudioJSPlay() {
+            var file = getFile();
+            if (!file) {
+                return;
+            }
+            var asset = AV.Asset.fromFile(file);
+            asset.decodeToBuffer(function(buffer) {
+                var format = asset.format,
+                    currentSample = 0,
+                    xaudioHandle = new XAudioServer(
+                        format.channelsPerFrame,
+                        format.sampleRate,
+                        format.sampleRate,
+                        format.sampleRate * 2,
+                        function(samplesRequested) {
+                            var tempBuffer = [],
+                                maxSample = Math.min(buffer.length, currentSample + samplesRequested);
+                            for (var i = currentSample; i < maxSample; i++) {
+                                tempBuffer.push(buffer[i]);
+                            }
+                            currentSample = maxSample;
+                            if (!tempBuffer.length) {
+                                clearInterval(xaudioHandleLoop);
+                            }
+                            return tempBuffer;
+                        },
+                        1,
+                        function() {
+                            alert("Your browser is unable to play real-time audio.");
+                        }
+                    );
+
+                var xaudioHandleLoop = setInterval(function () {
+                    xaudioHandle.executeCallback();
+                }, 20);
+            });
+        }
+
     </script>
 </head>
 
 <body>
-	<p><input type="file" id="myFile" /><button onclick="startPlay()">startPlay</button></p>
+	<p>
+        <input type="file" id="myFile" />
+        <button onclick="startAuroraJSPlay()">Play by Aurora.JS</button>
+        <button onclick="startXAudioJSPlay()">Play by XAudioJS</button>
+    </p>
 </body>
 
 </html>
